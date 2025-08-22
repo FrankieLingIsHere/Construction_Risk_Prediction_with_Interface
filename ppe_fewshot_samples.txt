@@ -1,0 +1,163 @@
+Scenario:
+A construction worker was operating a jackhammer without wearing ear protection. After several hours, the worker reported ringing in his ears and hearing loss.
+
+Expected Output:
+{
+  "Hazards": ["Noise Exposure", "No Ear Protection"],
+  "Cause of Accident": "Failure to wear ear protection while operating loud equipment",
+  "Degree of Injury": "Medium"
+}
+
+---
+Scenario:
+An employee was handling corrosive chemicals without gloves. The chemical splashed onto her hands, causing burns and skin irritation.
+
+Expected Output:
+{
+  "Hazards": ["Chemical Exposure", "No Gloves"],
+  "Cause of Accident": "Direct contact with corrosive chemicals due to lack of protective gloves",
+  "Degree of Injury": "High"
+}
+
+---
+Scenario:
+A worker was performing overhead welding without safety goggles. Hot metal fragments fell into his eyes, resulting in an eye injury.
+
+Expected Output:
+{
+  "Hazards": ["Flying Debris", "No Safety Goggles", "Welding"],
+  "Cause of Accident": "Eye injury from flying metal fragments due to not wearing safety goggles during welding",
+  "Degree of Injury": "Medium"
+}
+
+---
+Scenario:
+A laborer was mixing concrete without wearing a dust mask. He developed a persistent cough and respiratory discomfort after inhaling cement dust.
+
+Expected Output:
+{
+  "Hazards": ["Cement Dust", "No Dust Mask"],
+  "Cause of Accident": "Respiratory irritation from inhaling cement dust without a dust mask",
+  "Degree of Injury": "Medium"
+}
+
+---
+Scenario:
+An electrician was working near live wires without insulated gloves. He received an electric shock while handling the wires.
+
+Expected Output:
+{
+  "Hazards": ["Live Wires", "No Insulated Gloves"],
+  "Cause of Accident": "Electric shock due to handling live wires without insulated gloves",
+  "Degree of Injury": "High"
+}
+
+---
+Scenario:
+A roofer was working on a steep roof without a safety harness. He slipped and fell, sustaining multiple injuries.
+
+Expected Output:
+{
+  "Hazards": ["Fall Hazard", "No Safety Harness"],
+  "Cause of Accident": "Fall from height due to not wearing a safety harness",
+  "Degree of Injury": "High"
+}
+
+---
+Scenario:
+A painter was using solvent-based paint in a confined space without a respirator. He experienced dizziness and headaches from inhaling fumes.
+
+Expected Output:
+{
+  "Hazards": ["Solvent Fumes", "No Respirator"],
+  "Cause of Accident": "Exposure to solvent fumes in a confined space without a respirator",
+  "Degree of Injury": "Medium"
+}
+
+---
+Scenario:
+A worker was grinding metal without a face shield. Metal shards struck his face, causing cuts and bruises.
+
+Expected Output:
+{
+  "Hazards": ["Metal Shards", "No Face Shield", "Grinding"],
+  "Cause of Accident": "Facial injury from metal shards due to not wearing a face shield during grinding",
+  "Degree of Injury": "Medium"
+}
+
+---
+Scenario:
+A carpenter was using a circular saw without safety glasses. Sawdust and wood chips entered his eyes, resulting in irritation and minor injury.
+
+Expected Output:
+{
+  "Hazards": ["Sawdust", "Wood Chips", "No Safety Glasses", "Circular Saw"],
+  "Cause of Accident": "Eye irritation and injury from sawdust and wood chips due to not wearing safety glasses",
+  "Degree of Injury": "Low"
+}
+
+---
+Scenario:
+A worker was lifting heavy boxes without a back support belt. He strained his back and developed lower back pain.
+
+Expected Output:
+{
+  "Hazards": ["Heavy Lifting", "No Back Support Belt"],
+  "Cause of Accident": "Back strain from lifting heavy boxes without a back support belt",
+  "Degree of Injury": "Medium"
+}
+
+---
+Scenario:
+A welder was working with proper fire-resistant gloves, safety goggles, and a face shield. No injuries occurred during the welding operation.
+
+Expected Output:
+{
+  "Hazards": ["Welding", "Hot Metal"],
+  "Cause of Accident": "No accident occurred due to proper use of PPE during welding",
+  "Degree of Injury": "Low"
+}
+
+---
+Scenario:
+A painter was using solvent-based paint in a confined space while wearing a respirator and gloves. The job was completed safely without any health issues.
+
+Expected Output:
+{
+  "Hazards": ["Solvent Fumes", "Confined Space"],
+  "Cause of Accident": "No accident occurred due to correct use of PPE (respirator and gloves) in hazardous environment",
+  "Degree of Injury": "Low"
+}
+
+---
+Scenario:
+A group of workers was assigned to handle hazardous chemicals, but the site supervisor failed to provide enough protective gloves and goggles for everyone. One worker suffered a chemical burn.
+
+Expected Output:
+{
+  "Hazards": ["Chemical Exposure", "Insufficient PPE"],
+  "Cause of Accident": "Chemical burn due to lack of adequate PPE provided to all workers",
+  "Degree of Injury": "High"
+}
+
+---
+Scenario:
+A construction worker suffered a head injury after a falling object struck him. The report did not specify whether a hard hat was worn at the time of the incident.
+
+Expected Output:
+{
+  "Hazards": ["Falling Object", "Possible Lack of Hard Hat"],
+  "Cause of Accident": "Head injury from falling object; unclear if PPE (hard hat) was used",
+  "Degree of Injury": "Medium"
+}
+
+---
+Scenario:
+A maintenance technician was exposed to loud machinery noise for several hours. The company had not supplied ear protection for the task.
+
+Expected Output:
+{
+  "Hazards": ["Noise Exposure", "No Ear Protection Supplied"],
+  "Cause of Accident": "Hearing damage due to lack of supplied ear protection for noisy environment",
+  "Degree of Injury": "Medium"
+}

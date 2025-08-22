@@ -1,0 +1,11 @@
+huggingface_hub
+gradio
+torch
+transformers
+peft
+accelerate
+bitsandbytes
+sentencepiece
+protobuf
+google-generativeai
+faiss-cpu
