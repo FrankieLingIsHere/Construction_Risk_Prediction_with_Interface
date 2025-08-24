@@ -24,7 +24,7 @@ import json
 import gc
 
 # === Gemini setup ===
-genai.configure(api_key="AIzaSyAgtWKZPRmygHB79cuzKhLTZ_bpvwB0Es8")
+genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel("gemini-2.0-flash")
 chat = model.start_chat()
 
@@ -966,4 +966,5 @@ def create_interface():
 
 if __name__ == "__main__":
     app = create_interface()
+
     app.launch(server_name="0.0.0.0", share=True)
