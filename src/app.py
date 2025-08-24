@@ -1,3 +1,16 @@
+# --- PPE-aware risk adjustment helpers (module level) ---
+def ppe_present(scenario):
+    ppe_keywords = [
+        "hard hat", "helmet", "safety glasses", "goggles", "face shield", "gloves", "harness", "ear protection", "earmuffs", "earplugs", "reflective vest", "steel toe boots", "respirator", "mask", "protective clothing"
+    ]
+    scenario_lower = scenario.lower()
+    return any(kw in scenario_lower for kw in ppe_keywords)
+
+def adjust_risk_for_ppe(risk, scenario, debug_info):
+    if risk == "High" and ppe_present(scenario):
+        debug_info.append(f"   🛡️ PPE detected in scenario. Downgrading risk from High to Medium.")
+        return "Medium"
+    return risk
 import torch
 import re
 import gradio as gr
@@ -11,7 +24,7 @@ import json
 import gc
 
 # === Gemini setup ===
-genai.configure(api_key=GEMINI_API_KEY)
+genai.configure(api_key="AIzaSyAgtWKZPRmygHB79cuzKhLTZ_bpvwB0Es8")
 model = genai.GenerativeModel("gemini-2.0-flash")
 chat = model.start_chat()
 
@@ -189,11 +202,135 @@ def extract_json_only(text):
                 if all(field in parsed for field in required_fields):
                     return parsed
             except Exception:
-                continue
+                # Try to repair common JSON errors
+                try:
+                    repaired = repair_json_string(cleaned_json, required_fields)
+                    if repaired:
+                        return repaired
+                except Exception:
+                    continue
         return None
     except Exception as e:
         print(f"[extract_json_only] Failed to parse JSON: {e}")
         return None
+
+# === Robust JSON repair function ===
+def repair_json_string(json_str, required_fields):
+    # Attempt to fix common issues: missing quotes, trailing commas, unclosed braces
+    s = json_str.strip()
+    # Remove comments and non-JSON trailing text
+    s = re.sub(r'//.*', '', s)
+    s = re.sub(r'Output:', '', s)
+    s = s.replace('``', '')
+    # Remove trailing commas before closing braces/brackets
+    s = re.sub(r",\s*([}\]])", r"\1", s)
+    # Ensure keys are quoted
+    s = re.sub(r"([\{,]\s*)([A-Za-z0-9_ ]+)(\s*:)", r'\1"\2"\3', s)
+    # Ensure string values are quoted (only if not already quoted)
+    s = re.sub(r':\s*([^"\{\[\]\},]+)([\}\],])', lambda m: f': "{m.group(1).strip()}"{m.group(2)}', s)
+    # Add missing closing brace if needed
+    if not s.endswith("}") and not s.endswith("]"):
+        s += "}"
+    # Try to parse as single object
+    try:
+        parsed = json.loads(s)
+        # If it's a list, extract first dict
+        if isinstance(parsed, list):
+            for obj in parsed:
+                if isinstance(obj, dict):
+                    parsed = obj
+                    break
+        # Extract only required fields if dict (ignore extra fields)
+        if isinstance(parsed, dict):
+            result = {}
+            for field in required_fields:
+                value = parsed.get(field, "")
+                # Handle alternative field names for Degree of Injury
+                if field == "Degree of Injury" and not value:
+                    value = parsed.get("Level of Injury", "")
+                # Normalize Degree of Injury/Level of Injury using regex
+                if field == "Degree of Injury":
+                    if isinstance(value, str):
+                        match = re.search(r"high|medium|low", value, re.IGNORECASE)
+                        if match:
+                            value = match.group(0).capitalize()
+                        else:
+                            value = "Medium"
+                if field == "Hazards" and isinstance(value, list):
+                    result[field] = value if value else "Unknown or not detected"
+                else:
+                    result[field] = value if value else (
+                        "Unknown or not detected" if field == "Hazards" else
+                        "Could not be determined from scenario" if field == "Cause of Accident" else
+                        "Medium"
+                    )
+            return result
+        # If not dict, fallback
+        return {"Hazards": "Unknown or not detected", "Cause of Accident": "Could not be determined from scenario", "Degree of Injury": "Medium"}
+    except Exception:
+        # Try to extract first valid object from array-like string
+        array_match = re.search(r'\[(\{.*?\})\]', s)
+        if array_match:
+            obj_str = array_match.group(1)
+            try:
+                obj = json.loads(obj_str)
+                result = {field: obj.get(field, "") for field in required_fields}
+                for field in required_fields:
+                    if not result[field]:
+                        if field == "Hazards":
+                            result[field] = "Unknown or not detected"
+                        elif field == "Cause of Accident":
+                            result[field] = "Could not be determined from scenario"
+                        elif field == "Degree of Injury":
+                            result[field] = "Medium"
+                return result
+            except Exception:
+                pass
+        # === NEW: Regex extraction for severely malformed JSON ===
+        result = {}
+        # Hazards: extract list (support both quoted and unquoted, and plain text)
+        hazards_match = re.search(r'"Hazards"\s*:\s*(\[.*?\])', s)
+        if not hazards_match:
+            hazards_match = re.search(r'Hazards\s*:\s*(\[.*?\])', s)
+        if hazards_match:
+            try:
+                hazards_val = json.loads(hazards_match.group(1))
+                result["Hazards"] = hazards_val if hazards_val else "Unknown or not detected"
+            except Exception:
+                result["Hazards"] = "Unknown or not detected"
+        else:
+            result["Hazards"] = "Unknown or not detected"
+        # Cause of Accident: extract string (support both quoted and unquoted, and plain text)
+        cause_match = re.search(r'"Cause of Accident"\s*:\s*"(.*?)"', s)
+        if not cause_match:
+            cause_match = re.search(r'Cause of Accident\s*:\s*(.*?)(?=\n|$)', s)
+        if cause_match:
+            result["Cause of Accident"] = cause_match.group(1).strip()
+        else:
+            result["Cause of Accident"] = "Could not be determined from scenario"
+        # Degree of Injury: extract and normalize even if embedded in longer string or with '='
+        val = None
+        # Try to match quoted or unquoted, with : or =, and allow for trailing comma or brace
+        degree_match = re.search(r'"Degree of Injury"\s*[:=]\s*"?([A-Za-z]+)"?', s)
+        if not degree_match:
+            degree_match = re.search(r'"Level of Injury"\s*[:=]\s*"?([A-Za-z]+)"?', s)
+        if not degree_match:
+            # Also match unquoted, e.g. Degree of Injury=High
+            degree_match = re.search(r'Degree of Injury\s*[:=]\s*([A-Za-z]+)', s)
+        if not degree_match:
+            degree_match = re.search(r'Level of Injury\s*[:=]\s*([A-Za-z]+)', s)
+        if degree_match:
+            val = degree_match.group(1)
+        # Normalize value using regex (find first high/medium/low)
+        if val:
+            match = re.search(r"high|medium|low", val, re.IGNORECASE)
+            if match:
+                result["Degree of Injury"] = match.group(0).capitalize()
+            else:
+                result["Degree of Injury"] = "Medium"
+        else:
+            result["Degree of Injury"] = "Medium"
+        return result
 
 def generate_single_model_output(adapter_path, model_num, prompt, max_length=300, temperature=0.7):
     """Generate output using on-demand adapter loading"""
@@ -218,7 +355,29 @@ def generate_single_model_output(adapter_path, model_num, prompt, max_length=300
         )
 
     result = tokenizer.decode(output[0], skip_special_tokens=True).strip()
-    return result
+
+    # === LOG RAW OUTPUT BEFORE REPAIR ===
+    print(f"[Model {model_num} Raw Output BEFORE Repair]:\n{result}\n{'-'*60}")
+
+    # === Strict post-processing and robust repair for output quality ===
+    parsed_json = extract_json_only(result)
+    required_fields = ["Hazards", "Cause of Accident", "Degree of Injury"]
+    if parsed_json is not None and all(field in parsed_json and parsed_json[field] for field in required_fields):
+        return json.dumps(parsed_json, ensure_ascii=False)
+    else:
+        # Try to repair the output directly if not already done
+        repaired = repair_json_string(result, required_fields)
+        if repaired:
+            print(f"[generate_single_model_output] JSON repaired for model {model_num}.")
+            return json.dumps(repaired, ensure_ascii=False)
+        # Fallback: create a safe template output
+        fallback_json = {
+            "Hazards": "Unknown or not detected",
+            "Cause of Accident": "Could not be determined from scenario",
+            "Degree of Injury": "Medium"  # Use safe middle ground
+        }
+        print(f"[generate_single_model_output] Fallback used for model {model_num} due to unrecoverable output.")
+        return json.dumps(fallback_json, ensure_ascii=False)
 
 def verify_single_model_quality_with_gemini(raw_output, scenario_text, model_num, debug_info):
     """
@@ -346,6 +505,20 @@ def analyze_with_gemini_final_integration(raw_outputs, scenario_text, debug_info
     for i, output in enumerate(raw_outputs):
         prompt += f"Model {i+1} Output:\n{output}\n\n"
 
+    # --- PPE-aware risk adjustment helper ---
+    def ppe_present(scenario):
+        ppe_keywords = [
+            "hard hat", "helmet", "safety glasses", "goggles", "face shield", "gloves", "harness", "ear protection", "earmuffs", "earplugs", "reflective vest", "steel toe boots", "respirator", "mask", "protective clothing"
+        ]
+        scenario_lower = scenario.lower()
+        return any(kw in scenario_lower for kw in ppe_keywords)
+
+    def adjust_risk_for_ppe(risk, scenario, debug_info):
+        if risk == "High" and ppe_present(scenario):
+            debug_info.append(f"   🛡️ PPE detected in scenario. Downgrading risk from High to Medium.")
+            return "Medium"
+        return risk
+
     prompt += (
         "INSTRUCTIONS:\n"
         "- For CAUSE: Extract only the most specific and relevant cause from the models' 'Cause of Accident' fields\n"
@@ -403,6 +576,18 @@ def generate_prediction_cascade_with_gemini_evaluation(scenario_text, max_len, t
     timings = {}
     overall_start = time.time()
 
+    # --- Simple Gemini evaluation cache ---
+    gemini_cache = {}
+
+    def gemini_eval_cached(output, scenario_text, model_num, debug_info):
+        cache_key = (output, scenario_text, model_num)
+        if cache_key in gemini_cache:
+            debug_info.append(f"   ⚡ Gemini cache hit for model {model_num}")
+            return gemini_cache[cache_key]
+        result = verify_single_model_quality_with_gemini(output, scenario_text, model_num, debug_info)
+        gemini_cache[cache_key] = result
+        return result
+
     try:
         if not scenario_text.strip():
             return "Please enter a scenario", "", "\n".join(debug_info), ""
@@ -436,9 +621,11 @@ def generate_prediction_cascade_with_gemini_evaluation(scenario_text, max_len, t
         cascade_stopped_at = None
         models_tested = 0
         t1 = time.time()
+        early_stop = False
         for i, adapter_path in enumerate(MODEL_PATHS, 1):
             t_model_start = time.time()
             result = generate_single_model_output(adapter_path, i, prompt, max_len, temperature)
+            print(f"[Cascade] Model {i} output (raw):\n{result}\n{'='*60}")
             raw_outputs.append(result)
             timings_model.append(time.time() - t_model_start)
             # Gemini evaluation for this output
@@ -446,7 +633,7 @@ def generate_prediction_cascade_with_gemini_evaluation(scenario_text, max_len, t
             gemini_eval = None
             if result is not None:
                 try:
-                    gemini_eval = verify_single_model_quality_with_gemini(result, scenario_text, i, debug_info)
+                    gemini_eval = gemini_eval_cached(result, scenario_text, i, debug_info)
                     gemini_results.append(gemini_eval)
                 except Exception as e:
                     import traceback
@@ -459,15 +646,32 @@ def generate_prediction_cascade_with_gemini_evaluation(scenario_text, max_len, t
                 timings_eval.append(0.0)
                 continue
             timings_eval.append(time.time() - t_eval_start)
-            # Check if Gemini says this model is satisfactory
+            # --- Early stopping: stop if Gemini rates as 'Good' or better ---
             if gemini_eval and isinstance(gemini_eval, tuple):
-                is_satisfactory, _, _, _ = gemini_eval
+                is_satisfactory, quality, _, json_output = gemini_eval
+                # Stop if 'Very Good' or 'Excellent' (score >= 4)
                 if is_satisfactory:
                     cascade_stopped_at = i
                     models_tested = i
                     debug_info.append(f"\n✅ GEMINI APPROVED: Model {i} is satisfactory!")
                     debug_info.append(f"🎯 Models tested: {models_tested}/{len(MODEL_PATHS)}")
                     debug_info.append(f"💾 Efficiency: Saved {len(MODEL_PATHS) - models_tested} model runs")
+                    break
+                # --- NEW: Stop if 'Good' and output is structurally valid and cause is specific ---
+                if quality == "Good" and json_output and json_output.get("Cause of Accident") and len(str(json_output.get("Cause of Accident"))) > 10:
+                    cascade_stopped_at = i
+                    models_tested = i
+                    debug_info.append(f"\n✅ EARLY STOP: Model {i} rated 'Good' and output is valid/specific.")
+                    debug_info.append(f"🎯 Models tested: {models_tested}/{len(MODEL_PATHS)}")
+                    debug_info.append(f"💾 Efficiency: Saved {len(MODEL_PATHS) - models_tested} model runs")
+                    break
+            # --- NEW: If first output is highly relevant, skip Gemini for later models ---
+            if i == 1 and gemini_eval and isinstance(gemini_eval, tuple):
+                _, quality, _, json_output = gemini_eval
+                if quality in ["Very Good", "Excellent"] and json_output and json_output.get("Cause of Accident") and "fall" in str(json_output.get("Cause of Accident")).lower():
+                    debug_info.append(f"\n⚡ First model output highly relevant, skipping Gemini for later models.")
+                    cascade_stopped_at = i
+                    models_tested = i
                     break
         if cascade_stopped_at is None:
             models_tested = len(MODEL_PATHS)
@@ -570,26 +774,44 @@ def generate_prediction_cascade_with_gemini_evaluation(scenario_text, max_len, t
                         _, _, cause_assessment = gemini_assessments[best_model_idx-1]
                         if cause_assessment in ["Wrong", "Generic"] or not final_cause or len(str(final_cause)) < 10:
                             cause_flagged = True
-            # Fallback: Use first valid model output if no highlight
+            # Fallback: Use median/mode of all valid model outputs for Degree of Injury
             if not highlight_shown:
+                valid_risks = []
                 for idx, output in enumerate(raw_outputs):
                     json_data = extract_json_only(output)
                     if json_data is not None:
-                        final_cause = json_data.get("Cause of Accident")
-                        final_risk = json_data.get("Degree of Injury")
+                        risk = json_data.get("Degree of Injury")
+                        # Only accept normalized values
+                        if risk in ["High", "Medium", "Low"]:
+                            valid_risks.append(risk)
+                        if not final_cause:
+                            final_cause = json_data.get("Cause of Accident")
                         if idx < len(gemini_assessments):
                             _, _, cause_assessment = gemini_assessments[idx]
                             if cause_assessment in ["Wrong", "Generic"] or not final_cause or len(str(final_cause)) < 10:
                                 cause_flagged = True
                                 integration_summary.append("\nNo model output was rated 'Good' or better. Using first valid output for final result.")
-                        break
+                # Select median/mode risk
+                if valid_risks:
+                    from collections import Counter
+                    risk_counts = Counter(valid_risks)
+                    # Mode (most common); if tie, prefer High > Medium > Low
+                    most_common = risk_counts.most_common()
+                    top_count = most_common[0][1]
+                    top_risks = [risk for risk, count in most_common if count == top_count]
+                    if "High" in top_risks:
+                        final_risk = "High"
+                    elif "Medium" in top_risks:
+                        final_risk = "Medium"
+                    else:
+                        final_risk = "Low"
+                else:
+                    final_risk = infer_injury_degree_from_scenario(scenario_text)
+                    integration_summary.append(f"   🛡️ FINAL SAFETY CHECK: Risk set to {final_risk}")
                 if not final_cause:
                     integration_summary.append("\nNo valid model output found. Cause set to scenario summary.")
                     final_cause = f"Incident: {scenario_text[:80]}..."
                     cause_flagged = True
-                if not final_risk:
-                    final_risk = infer_injury_degree_from_scenario(scenario_text)
-                    integration_summary.append(f"   🛡️ FINAL SAFETY CHECK: Risk set to {final_risk}")
 
 
 
@@ -619,6 +841,12 @@ def generate_prediction_cascade_with_gemini_evaluation(scenario_text, max_len, t
                     integration_summary.append("   ⚠️ Failed to process cause into natural language, using fallback.")
 
             timings['integration_phase'] = time.time() - t2
+
+            # --- PPE-aware risk adjustment ---
+            adjusted_risk = adjust_risk_for_ppe(final_risk, scenario_text, integration_summary)
+            if adjusted_risk != final_risk:
+                integration_summary.append(f"   ⚠️ Risk adjusted due to PPE presence: {final_risk} → {adjusted_risk}")
+            final_risk = adjusted_risk
 
             integration_summary.append(f"\n📝 FINAL RESULT:")
             integration_summary.append(f"   📝 Cause: {final_cause}")
@@ -738,5 +966,4 @@ def create_interface():
 
 if __name__ == "__main__":
     app = create_interface()
-
     app.launch(server_name="0.0.0.0", share=True)
