@@ -9,6 +9,7 @@ This project provides an AI-powered interface for construction safety risk predi
 ```bash
 git clone https://github.com/FrankieLingIsHere/Construction_Risk_Prediction_with_Interface.git
 cd Construction_Risk_Prediction_with_Interface
+```
 
 ### 2. Create a Python Virtual Environment
 
@@ -18,19 +19,23 @@ Create and activate a virtual environment:
 ```bash
 python -m venv venv
 venv\Scripts\activate
+```
 
 **macOS/Linux:**
 ```bash
 python3 -m venv venv
 source venv/bin/activate
+```
 
 ### 3. Install Dependencies
 ```bash
 pip install -r requirements.txt
+```
 
 ### 4. Run the Interface
 ```bash
 python src/app.py
+```
 
 The **Gradio web interface** will launch.  
 Follow the instructions on the page to input construction scenarios and view:
