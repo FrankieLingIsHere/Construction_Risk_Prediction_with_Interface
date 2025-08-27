@@ -48,7 +48,7 @@ Follow the instructions on the page to input construction scenarios and view:
 
 ## Notes
 
-- Make sure you have a **valid Gemini API key** and access to the required model files.  
+- Make sure you have a **valid Gemini API key** and access to the required model files. Replace your api key in the app.py file so that it can run the interface properly.
 - For best results, use the **provided example scenarios** or detailed construction incident descriptions.  
 
 ---
