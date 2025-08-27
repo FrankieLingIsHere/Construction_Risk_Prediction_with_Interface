@@ -4,7 +4,17 @@ def ppe_present(scenario):
         "hard hat", "helmet", "safety glasses", "goggles", "face shield", "gloves", "harness", "ear protection", "earmuffs", "earplugs", "reflective vest", "steel toe boots", "respirator", "mask", "protective clothing"
     ]
     scenario_lower = scenario.lower()
-    return any(kw in scenario_lower for kw in ppe_keywords)
+    # Only count PPE as present if it is described as being worn/used, not just mentioned
+    # Avoid false positives from 'without', 'no', 'missing', 'lack of', etc.
+    for kw in ppe_keywords:
+        # Look for phrases like 'wearing', 'using', 'equipped with', 'has', 'provided with' before PPE keyword
+        pattern = rf'(wearing|using|equipped with|has|provided with|utilizing|donned|fitted with)\s+.*?{re.escape(kw)}'
+        if re.search(pattern, scenario_lower):
+            # Check for negation words in the same sentence
+            negation_pattern = rf'(without|no|missing|lack of|not wearing|not using|failed to wear|failed to use)\s+.*?{re.escape(kw)}'
+            if not re.search(negation_pattern, scenario_lower):
+                return True
+    return False
 
 def adjust_risk_for_ppe(risk, scenario, debug_info):
     if risk == "High" and ppe_present(scenario):
@@ -308,19 +318,26 @@ def repair_json_string(json_str, required_fields):
             result["Cause of Accident"] = cause_match.group(1).strip()
         else:
             result["Cause of Accident"] = "Could not be determined from scenario"
-        # Degree of Injury: extract and normalize even if embedded in longer string or with '='
+        # Degree of Injury: extract and normalize even if embedded in longer string or with '=' or extra characters
         val = None
-        # Try to match quoted or unquoted, with : or =, and allow for trailing comma or brace
-        degree_match = re.search(r'"Degree of Injury"\s*[:=]\s*"?([A-Za-z]+)"?', s)
-        if not degree_match:
-            degree_match = re.search(r'"Level of Injury"\s*[:=]\s*"?([A-Za-z]+)"?', s)
-        if not degree_match:
-            # Also match unquoted, e.g. Degree of Injury=High
-            degree_match = re.search(r'Degree of Injury\s*[:=]\s*([A-Za-z]+)', s)
-        if not degree_match:
-            degree_match = re.search(r'Level of Injury\s*[:=]\s*([A-Za-z]+)', s)
-        if degree_match:
-            val = degree_match.group(1)
+        # Match quoted or unquoted, with : or =, and allow for trailing comma, brace, or extra characters
+        degree_patterns = [
+            r'"Degree of Injury"\s*[:=]\s*"?([A-Za-z]+)"?',
+            r'"Level of Injury"\s*[:=]\s*"?([A-Za-z]+)"?',
+            r'Degree of Injury\s*[:=]\s*([A-Za-z]+)',
+            r'Level of Injury\s*[:=]\s*([A-Za-z]+)',
+            # Match Degree of Injury=High or Degree of Injury=High, or Degree of Injury=High}
+            r'Degree of Injury["\']?\s*=\s*([A-Za-z]+)',
+            r'Level of Injury["\']?\s*=\s*([A-Za-z]+)',
+            # Match Degree of Injury=High with possible trailing non-alpha
+            r'Degree of Injury["\']?\s*=\s*([A-Za-z]+)[^A-Za-z]',
+            r'Level of Injury["\']?\s*=\s*([A-Za-z]+)[^A-Za-z]',
+        ]
+        for pat in degree_patterns:
+            degree_match = re.search(pat, s)
+            if degree_match:
+                val = degree_match.group(1)
+                break
         # Normalize value using regex (find first high/medium/low)
         if val:
             match = re.search(r"high|medium|low", val, re.IGNORECASE)
@@ -966,5 +983,4 @@ def create_interface():
 
 if __name__ == "__main__":
     app = create_interface()
-
     app.launch(server_name="0.0.0.0", share=True)
