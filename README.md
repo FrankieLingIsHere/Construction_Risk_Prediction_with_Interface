@@ -48,7 +48,7 @@ Follow the instructions on the page to input construction scenarios and view:
 
 ## Notes
 
-- Make sure you have a **valid Gemini API key** and access to the required model files. Replace your api key in the app.py file so that it can run the interface properly. Get your API Key here: [Google API KEY](https://aistudio.google.com/app/u/3/apikey)
+- Make sure you have a **valid Gemini API key** and access to the required model files. Replace your api key in the app.py file so that it can run the interface properly. Get your API Key here if you do not have one yet: [Google API KEY](https://aistudio.google.com/app/u/3/apikey)
 - For best results, use the **provided example scenarios** or detailed construction incident descriptions.  
 
 ---
